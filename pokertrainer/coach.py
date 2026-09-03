@@ -19,7 +19,7 @@ from .context import DecisionContext
 from .equity import EquityCalculator
 from .evaluation import HandCategory, HandEvaluator
 from .events import CommunityCardsDealt, GameEvent, HandStarted, HoleCardsDealt, PlayerActed
-from .strategies import BotProfile, HeuristicBotStrategy, chen_score, hand_label, starting_hand_class
+from .strategies import BotProfile, HeuristicBotStrategy, chen_explanation, chen_score, hand_label, starting_hand_class
 
 COACH_PROFILE = BotProfile("coach", "Coach", 0.45, 0.6, "solide, uitgebalanceerd")
 
@@ -109,7 +109,11 @@ class Coach:
     def _preflop_lines(context: DecisionContext) -> list[str]:
         label = hand_label(context.hole_cards)
         score = chen_score(context.hole_cards)
-        lines = [f"Je starthand is {label} (klasse: {starting_hand_class(score)})."]
+        lines = [
+            f"Je starthand is {label} (klasse: {starting_hand_class(score)}).",
+            f"Chen-score: {chen_explanation(context.hole_cards)} van 20 "
+            "(12+ premium, 9-11 sterk, 7-8 speelbaar, 5-6 marginaal, minder zwak).",
+        ]
         high, low = sorted(context.hole_cards, reverse=True)
         if high.rank == low.rank:
             lines.append("Een pocket pair: je hebt al een paar; hoe hoger, hoe beter.")

@@ -46,20 +46,40 @@ def hand_label(cards: Sequence[Card]) -> str:
     return f"{high.rank.label}{low.rank.label}{suffix}"
 
 
-def chen_score(cards: Sequence[Card]) -> int:
-    """Chen-formule: een klassieke score (ongeveer -1 .. 20) voor starthanden."""
+def chen_breakdown(cards: Sequence[Card]) -> list[tuple[str, float]]:
+    """De onderdelen van de Chen-formule: (omschrijving, punten). Som + afronden naar boven = score."""
     high, low = sorted(cards, reverse=True)
     base = {Rank.ACE: 10.0, Rank.KING: 8.0, Rank.QUEEN: 7.0, Rank.JACK: 6.0}.get(high.rank, high.rank.value / 2)
+    parts = [(f"hoogste kaart {high.rank.dutch_name}", base)]
     if high.rank == low.rank:
-        return int(max(5.0, base * 2))
-    score = base
+        parts.append(("paar: punten verdubbeld (minimaal 5)", max(5.0, base * 2) - base))
+        return parts
     if high.suit == low.suit:
-        score += 2
+        parts.append(("suited", 2.0))
     gap = high.rank.value - low.rank.value - 1
-    score -= {0: 0, 1: 1, 2: 2, 3: 4}.get(gap, 5)
+    penalty = {0: 0, 1: 1, 2: 2, 3: 4}.get(gap, 5)
+    if penalty:
+        parts.append((f"gat van {gap} kaart{'en' if gap > 1 else ''}", -float(penalty)))
     if gap <= 1 and high.rank.value < Rank.QUEEN.value:
-        score += 1
-    return math.ceil(score)
+        parts.append(("aansluitend onder de vrouw", 1.0))
+    return parts
+
+
+def chen_score(cards: Sequence[Card]) -> int:
+    """Chen-formule: een klassieke score (ongeveer -1 .. 20) voor starthanden."""
+    return math.ceil(sum(points for _, points in chen_breakdown(cards)))
+
+
+def chen_explanation(cards: Sequence[Card]) -> str:
+    """``"hoogste kaart heer 8, gat van 7 kaarten -5 = 3"``"""
+
+    def number(points: float, signed: bool) -> str:
+        text = f"{points:g}".replace(".", ",")
+        return f"+{text}" if signed and points > 0 else text
+
+    parts = chen_breakdown(cards)
+    pieces = [f"{label} {number(points, index > 0)}" for index, (label, points) in enumerate(parts)]
+    return ", ".join(pieces) + f" = {chen_score(cards)}"
 
 
 def starting_hand_class(score: int) -> str:
