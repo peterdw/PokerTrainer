@@ -34,7 +34,7 @@ python -m pytest
 | Menu | Les | Inhoud |
 |------|-----|--------|
 | 1 | Handrangschikking | Alle 10 categorieën met voorbeelden, daarna een quiz: "welke hand is dit?" en "wie wint de showdown?" |
-| 2 | Regels van toernooipoker | In elf delen, vanaf nul: het kaartspel, chips en blinds, verloop van een hand, de acties, inzetregels, zijpotten, showdown, starthanden beoordelen (Chen-formule), toernooiregels en een woordenlijst. Met quiz. |
+| 2 | Regels van toernooipoker | In twaalf delen, vanaf nul: het kaartspel, chips en blinds, verloop van een hand, de acties, inzetregels, zijpotten, showdown, starthanden beoordelen (Chen-formule), verdedigen tegen een raise en push-or-fold, toernooiregels en een woordenlijst. Met quiz. |
 | 3 | Oefentafel met coach | 10 handen tegen drie bots met verschillende stijlen. De coach legt bij elke beslissing uit: starthandklasse, draws en outs, winkans, pot odds, positie en een advies. Wie bust is koopt opnieuw in. |
 | 4 | Sit-and-go toernooi | Zes spelers, WSOP-achtige blindstructuur met big blind ante vanaf niveau 4. De coach helpt alleen als je `?` typt. |
 
@@ -54,8 +54,22 @@ De coach en de bots beoordelen de twee eigen kaarten met een **starthandmodel**
 
 Beide modellen vertalen hun oordeel naar dezelfde schaal (premium / een raise
 waard / speelbaar / fold), zodat de bots met elke methode dezelfde speelstijl
-houden. In deel 9 van de regelles kun je in de browser een hand en positie
-invoeren en beide oordelen naast elkaar zien.
+houden. In deel 9 van de regelles kun je in de browser een hand, positie en
+situatie invoeren en de oordelen naast elkaar zien.
+
+Twee situaties krijgen een eigen behandeling:
+
+- **Tegen een raise** (`defend`). De rangetabel kent een 3-bet-range (TT+, AQs+,
+  AKo) en drie call-ranges: in positie (± 14 %), buiten positie (± 8 %) en de
+  big blind, die dankzij de al betaalde blind ruim verdedigt (± 48 %). De
+  Chen-methode eist twee punten meer dan om te openen.
+- **Korte stack** (`push_fold.py`, onder 12 big blinds, voor beide methodes).
+  Een push-or-fold-tabel naar de heads-up Nash-tabel: per hand tot hoeveel big
+  blinds je all-in gaat; hoe meer spelers achter je, hoe minder handen. Een
+  all-in callen vraagt een sterkere hand dan zelf duwen.
+
+De coach noemt bij elke beslissing de regel die hij toepast én waarom
+(positie, prijs van de call, initiatief van de raiser, stackgrootte).
 
 ## Browserversie
 
@@ -110,7 +124,8 @@ pokertrainer/
   events.py      Observer        EventBus; ConsoleView, Coach en SessionStats abonneren zich
   actions.py     Command         Fold/Check/Call/Raise/AllIn-commando's + CommandFactory
   strategies.py  Strategy        HeuristicBotStrategy, HumanConsoleStrategy, ScriptedStrategy
-  starting_hands.py Strategy     StartingHandModel: ChenModel (beginner) en RangeChartModel (gevorderd)
+  starting_hands.py Strategy     StartingHandModel: ChenModel (beginner) en RangeChartModel (gevorderd), incl. verdedigen
+  push_fold.py                   NashPushFold: push-or-fold voor korte stacks
   streets.py     State           PreFlop → Flop → Turn → River → Showdown
   tournament.py  Builder         TournamentConfigBuilder, presets (championship_sit_and_go)
   factory.py     Factory Method  PlayerFactory.create_strategy (bot- en mensfabriek)

@@ -9,10 +9,27 @@ Afspraken in de tekst:
 - ``Voorbeeld: ...``          een rekenvoorbeeld
 """
 
+from .push_fold import NASH, PUSH_FOLD_LIMIT
 from .starting_hands import HAND_MODELS, RangeChartModel
 
 _CHART = HAND_MODELS[RangeChartModel.key]
 assert isinstance(_CHART, RangeChartModel)
+
+
+def _push_examples() -> str:
+    def text(label: str) -> str:
+        limit = NASH.limit[label]
+        return f"{label} altijd" if limit >= 20 else f"{label} tot {limit:g}".replace(".", ",")
+
+    return ", ".join(text(label) for label in ("A2o", "22", "K5o", "Q7o", "76s", "72o")) + " big blinds."
+
+
+def _push_shares() -> list[str]:
+    return [
+        f"  ± {NASH.push_share(10, 5, 'vroeg (under the gun)'):.0%} onder de gun (vijf kunnen callen), "
+        f"± {NASH.push_share(10, 2, 'button'):.0%} op de button (twee kunnen callen),",
+        f"  ± {NASH.push_share(10, 1, 'small blind'):.0%} heads-up in de small blind (alleen de big blind kan callen).",
+    ]
 
 RULE_PAGES: list[tuple[str, list[str]]] = [
     (
@@ -177,6 +194,30 @@ RULE_PAGES: list[tuple[str, list[str]]] = [
         ],
     ),
     (
+        "Verdedigen tegen een raise en push-or-fold",
+        [
+            "Als er vóór jou al geraised is, gelden andere regels dan om zelf te openen. De raiser heeft een sterke",
+            "hand aangekondigd en het initiatief; jij betaalt om mee te mogen doen. De rangetabel (methode",
+            "'gevorderd') kent daarvoor aparte verdedigingsranges:",
+            *_CHART.defend_summary_lines(),
+            f"Korte stack (minder dan ± {PUSH_FOLD_LIMIT:.0f} big blinds): push-or-fold, met beide coachmethodes.",
+            "• Een gewone raise heeft dan geen zin: na een call zit je vast aan de pot en kun je niet meer folden.",
+            "  Je gaat all-in of je past, niets ertussen.",
+            "• De push-or-fold-tabel (een vereenvoudiging van de wiskundig beste strategie voor twee spelers, de",
+            "  'Nash-tabel') zegt tot hoeveel big blinds je met een hand all-in gaat ('duwt'):",
+            "  " + _push_examples(),
+            "• Hoe meer tegenstanders je all-in nog kunnen callen, hoe minder handen je duwt: elke extra speler is",
+            "  een extra kans dat iemand een sterkere hand heeft. Bij 10 big blinds:",
+            *_push_shares(),
+            "• Ligt er al een raise van een grotere stack, dan ga je er all-in overheen ('re-shove') of je past;",
+            "  callen kan niet met zo'n korte stack. Dat vraagt meer dan zelf duwen: de raiser toonde al kracht.",
+            "• Een all-in callen vraagt het meest: de duwer heeft het initiatief en jij wint alleen met de beste",
+            f"  hand. Bij 10 big blinds call je ongeveer de beste {NASH.call_share(10):.0%} van de handen.",
+            "De coach noemt bij elke beslissing de regel die hij toepast én waarom, zodat je het advies kunt toetsen",
+            "in plaats van blind volgen. In de browser kun je in het vorige deel elke situatie zelf naspelen.",
+        ],
+    ),
+    (
         "Toernooiregels (zoals op de WSOP)",
         [
             "• Iedereen start met evenveel chips. Wie geen chips meer heeft, is uitgeschakeld.",
@@ -187,8 +228,8 @@ RULE_PAGES: list[tuple[str, list[str]]] = [
             "• Heads-up (nog twee spelers): de button is dan ook small blind, handelt preflop als eerste",
             "  en na de flop als laatste.",
             "• De laatste speler met alle chips wint. De eindstand volgt de volgorde van uitschakelen.",
-            "• Strategietip: met minder dan ± 10 big blinds speel je 'push or fold': all-in of passen,",
-            "  want voor een gewone raise en een fold daarna heb je te weinig chips.",
+            f"• Strategietip: met minder dan ± {PUSH_FOLD_LIMIT:.0f} big blinds speel je 'push or fold': all-in of",
+            "  passen, want voor een gewone raise en een fold daarna heb je te weinig chips (zie het vorige deel).",
         ],
     ),
     (
@@ -211,6 +252,10 @@ RULE_PAGES: list[tuple[str, list[str]]] = [
             "  dat aandeel, dan is callen op de lange duur winstgevend.",
             "TIGHT/LOOSE : een speler die weinig / veel handen speelt.",
             "PASSIEF/AGRESSIEF : een speler die liever callt / graag bet en raiset.",
+            "RANGE : de lijst starthanden waarmee je in een situatie meedoet (openen, een raise callen, re-raisen).",
+            "HEADS-UP : nog maar twee spelers in de hand of aan tafel; de button is dan ook small blind.",
+            "PUSHEN / DUWEN : met een korte stack meteen all-in gaan in plaats van raisen ('push or fold').",
+            "RE-SHOVE : met een korte stack all-in gaan over een raise van een ander heen.",
         ],
     ),
 ]
@@ -291,7 +336,7 @@ RULE_QUIZ: list[tuple[str, list[str], int, str]] = [
         "Je hebt nog 8 big blinds in een toernooi en krijgt een speelbare hand. Wat is de vuistregel?",
         ["Push or fold: all-in of passen", "Altijd de minimale raise", "Altijd callen en de flop bekijken"],
         1,
-        "Met minder dan ongeveer 10 big blinds heb je te weinig chips om te raisen en daarna nog te folden. "
-        "Je gaat all-in met een goede hand of je past.",
+        f"Met minder dan ongeveer {PUSH_FOLD_LIMIT:.0f} big blinds heb je te weinig chips om te raisen en daarna "
+        "nog te folden. Je gaat all-in met een goede hand of je past.",
     ),
 ]
