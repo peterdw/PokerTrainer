@@ -1085,6 +1085,11 @@
     app.content = await api("/api/content");
     renderHome();
     showScreen("screen-home");
+    // Deeplink: ?les=oefenen&naam=Peter start meteen een les.
+    const params = new URLSearchParams(location.search);
+    if (params.get("naam")) app.name = params.get("naam").trim().slice(0, 16) || "Jij";
+    const wanted = app.content.lessons.find((lesson) => lesson.key === params.get("les"));
+    if (wanted) startLesson(wanted);
   }
   init().catch((error) => toast(`Kan de server niet bereiken: ${error.message}`, 8000));
 })();
