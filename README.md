@@ -5,6 +5,8 @@ WSOP wordt gespeeld – spelenderwijs in de console. Het programma is geschreven
 in Python 3.11+ zonder externe afhankelijkheden en is opgebouwd rond de
 klassieke Gang-of-Four ontwerppatronen.
 
+![De oefentafel in de browser: croupier, flop, coachadvies en actiebalk](docs/screenshot-tafel.png)
+
 ## Starten
 
 Console:
@@ -56,6 +58,8 @@ als bladzijden met een quiz erachter.
   nieuwe blindniveaus, uitschakelingen en de winnaar. Met de knop **Stem** in de bovenbalk spreekt ze
   die zinnen ook hardop uit (spraaksynthese van de browser, Nederlandse stem indien aanwezig; standaard uit).
 - Het tempo van de bots is instelbaar (schuif in de bovenbalk).
+- Deeplink: `http://127.0.0.1:8765/?les=oefenen&naam=Peter` start meteen een les
+  (`rangschikking`, `regels`, `oefenen` of `toernooi`).
 - Aan de oefentafel adviseert de coach automatisch; in het toernooi alleen op verzoek.
 
 De browserlaag (`pokertrainer/web/`) gebruikt alleen de standaardbibliotheek:
