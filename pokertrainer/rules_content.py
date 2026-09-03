@@ -9,6 +9,11 @@ Afspraken in de tekst:
 - ``Voorbeeld: ...``          een rekenvoorbeeld
 """
 
+from .starting_hands import HAND_MODELS, RangeChartModel
+
+_CHART = HAND_MODELS[RangeChartModel.key]
+assert isinstance(_CHART, RangeChartModel)
+
 RULE_PAGES: list[tuple[str, list[str]]] = [
     (
         "Waar gaat het om?",
@@ -162,6 +167,13 @@ RULE_PAGES: list[tuple[str, list[str]]] = [
             "• Suited is een bonus van ongeveer één klasse, maar redt geen slechte hand.",
             "• Aansluitend én suited (76s, 98s) is speelbaar, vooral in late positie tegen veel spelers.",
             "• Positie telt mee: de coach geeft in late positie 1 punt extra.",
+            "De Chen-formule is de coachmethode 'beginner'. De methode 'gevorderd' rekent niet, maar gebruikt",
+            "een rangetabel per positie, zoals spelers het in de praktijk leren: hoe later je positie, hoe meer",
+            "handen je opent.",
+            *_CHART.summary_lines(),
+            "De big blind verdedigt even ruim als de button, want hij heeft al geld in de pot. Buiten de tabel",
+            "voor jouw positie is het antwoord fold, hoe mooi de hand er ook uitziet. Wisselen van methode kan in",
+            "het menu (console) of op het startscherm (browser).",
         ],
     ),
     (

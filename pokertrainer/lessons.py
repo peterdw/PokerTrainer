@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .cards import cards_to_str, parse_cards
 from .coach import Coach
@@ -21,6 +21,7 @@ from .factory import HumanPlayerFactory, create_bot_lineup
 from .quiz import EXAMPLE_HANDS, QuizGenerator
 from .rules_content import RULE_PAGES, RULE_QUIZ
 from .session import Tournament
+from .starting_hands import ChenModel, StartingHandModel
 from .tournament import TournamentConfig, championship_sit_and_go, practice_table
 from .view import ConsoleView, SessionStats
 
@@ -32,6 +33,7 @@ class TrainerServices:
     evaluator: HandEvaluator
     equity: EquityCalculator
     player_name: str
+    hand_model: StartingHandModel = field(default_factory=ChenModel)
 
 
 class Lesson(ABC):
@@ -186,11 +188,15 @@ class _PlayLesson(Lesson):
         services = self._services
         config = self.config()
         bus = EventBus()
-        coach = Coach(services.evaluator, services.equity, self._io, services.player_name, services.rng)
+        coach = Coach(
+            services.evaluator, services.equity, self._io, services.player_name, services.rng, services.hand_model
+        )
         human = HumanPlayerFactory(self._io, coach, self.auto_advice).create(
             services.player_name, config.starting_stack
         )
-        bots = create_bot_lineup(self.bot_keys, config.starting_stack, services.evaluator, services.rng)
+        bots = create_bot_lineup(
+            self.bot_keys, config.starting_stack, services.evaluator, services.rng, services.hand_model
+        )
         players = [human, *bots]
         services.rng.shuffle(players)
         bus.subscribe(ConsoleView(self._io, services.player_name))
@@ -222,6 +228,7 @@ class PracticeLesson(_PlayLesson):
         self._io.show("Je speelt 10 handen tegen drie bots met verschillende stijlen:")
         self._io.show("  Rots (tight-passief), Maniak (loose-agressief) en Solide (tight-agressief).")
         self._io.show("De coach legt bij elke beslissing uit wat hij zou doen en waarom.")
+        self._io.show(f"Coachmethode voor starthanden: {self._services.hand_model.name} (wisselen kan in het menu).")
         self._io.show("Je hoeft het advies niet te volgen: proberen en fouten maken is de bedoeling.")
         self._io.show("Wie zonder chips valt, koopt automatisch opnieuw in.")
         self._io.show("Typ [h] voor de mogelijke acties, [q] om te stoppen.")

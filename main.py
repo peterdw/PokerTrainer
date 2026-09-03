@@ -22,7 +22,7 @@ def _use_utf8_console() -> None:
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Poker Trainer: leer No-Limit Texas Hold'em")
     parser.add_argument("--web", action="store_true", help="start de browserversie in plaats van de console")
-    add_web_arguments(parser)
+    add_web_arguments(parser)  # --host, --port, --no-browser en --coach
     return parser.parse_args(argv)
 
 
@@ -32,6 +32,6 @@ if __name__ == "__main__":
     if args.web:
         from pokertrainer.web.server import serve
 
-        serve(args.host, args.port, open_browser=not args.no_browser)
+        serve(args.host, args.port, open_browser=not args.no_browser, default_model=args.coach)
     else:
-        PokerTrainer().run()
+        PokerTrainer(coach_method=args.coach).run()
