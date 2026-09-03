@@ -1,0 +1,9 @@
+[project]
+name = "pokertrainer"
+version = "1.0.0"
+description = "Leer No-Limit Texas Hold'em spelenderwijs (Gang-of-Four patronen)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
