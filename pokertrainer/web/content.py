@@ -10,8 +10,9 @@ from ..cards import parse_cards
 from ..evaluation import HandCategory
 from ..factory import BOT_PROFILES
 from ..lessons import RULE_PAGES, RULE_QUIZ, LessonFactory, PracticeLesson, TournamentLesson
+from ..push_fold import NASH, PushFoldAdvice
 from ..quiz import EXAMPLE_HANDS, QuizGenerator
-from ..starting_hands import CHART_POSITIONS, HAND_MODELS, HandAssessment, hand_model, normalize_label
+from ..starting_hands import CHART_POSITIONS, HAND_MODELS, HandAssessment, hand_model, label_cards, normalize_label
 from ..tournament import championship_sit_and_go, practice_table
 from .presenter import cards_json, level_json
 
@@ -75,10 +76,19 @@ def positions_json() -> list[dict]:
     ]
 
 
-def assessment_json(assessment: HandAssessment) -> dict:
+def assessment_json(assessment: HandAssessment, situation: str = "open") -> dict:
+    """Oordeel plus het advies in één woord, met dezelfde drempels als de bot."""
+    if assessment.premium:
+        advice = "re-raise" if situation == "raise" else "raise"
+    elif situation == "raise":
+        advice = "call" if assessment.worth_a_call else "fold"
+    else:
+        advice = "speelbaar" if assessment.playable else "fold"
     return {
         "label": assessment.label,
         "verdict": assessment.verdict,
+        "advice": advice,
+        "fold": advice == "fold",
         "value": round(assessment.value, 3),
         "strength": round(assessment.strength, 3),
         "playable": assessment.playable,
@@ -87,19 +97,49 @@ def assessment_json(assessment: HandAssessment) -> dict:
     }
 
 
-def starting_hand_json(hand: str, position: str) -> dict:
-    """Het oordeel van álle modellen over één starthand; ValueError bij onbekende invoer."""
+SITUATIONS = {
+    "open": "niemand heeft geraised",
+    "raise": "er is al geraised",
+    "push": "korte stack: zelf all-in?",
+    "call": "korte stack: een all-in callen?",
+}
+
+
+def _push_json(advice: PushFoldAdvice) -> dict:
+    return {
+        "key": "push-or-fold",
+        "name": "Push-or-fold-tabel (Nash-benadering)",
+        "verdict": advice.action,
+        "advice": advice.action,
+        "fold": not advice.go,
+        "value": None,
+        "strength": None,
+        "playable": advice.go,
+        "premium": False,
+        "lines": list(advice.lines),
+    }
+
+
+def starting_hand_json(hand: str, position: str, situation: str = "open", stack: float = 8.0, behind: int = 1) -> dict:
+    """Het oordeel over één starthand in een situatie; ValueError bij onbekende invoer."""
     label = normalize_label(hand)
     if position not in {key["key"] for key in positions_json()}:
         raise ValueError(f"Onbekende positie: {position!r}")
-    return {
-        "hand": label,
-        "position": position,
-        "models": [
-            {"key": model.key, "name": model.name, **assessment_json(model.assess_label(label, position, COACH_LOOSENESS))}
-            for model in HAND_MODELS.values()
-        ],
-    }
+    if situation not in SITUATIONS:
+        raise ValueError(f"Onbekende situatie: {situation!r}")
+    stack = min(max(float(stack), 1.0), 30.0)
+    behind = min(max(int(behind), 0), 9)
+    if situation == "push":
+        models = [_push_json(NASH.pushing(label_cards(label), stack, position, behind, COACH_LOOSENESS))]
+    elif situation == "call":
+        models = [_push_json(NASH.calling(label_cards(label), stack, looseness=COACH_LOOSENESS))]
+    else:
+        models = []
+        for model in HAND_MODELS.values():
+            method = model.defend_label if situation == "raise" else model.assess_label
+            assessment = method(label, position, COACH_LOOSENESS)
+            models.append({"key": model.key, "name": model.name, **assessment_json(assessment, situation)})
+    return {"hand": label, "position": position, "situation": situation, "stack": stack, "behind": behind, "models": models}
 
 
 def build_content(default_model: str = "beginner") -> dict:
@@ -147,6 +187,7 @@ def build_content(default_model: str = "beginner") -> dict:
         "tables": tables,
         "coach": models_json(hand_model(default_model).key),
         "positions": positions_json(),
+        "situations": [{"key": key, "name": name} for key, name in SITUATIONS.items()],
     }
 
 

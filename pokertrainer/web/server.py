@@ -198,10 +198,17 @@ class RequestHandler(BaseHTTPRequestHandler):
         self._json(self.backend.ranking_quiz())
 
     def _route_starting_hand(self, params: dict[str, str], query: dict[str, list[str]]) -> None:
-        hand = (query.get("hand") or [""])[0]
-        position = (query.get("positie") or ["button"])[0]
+        first = lambda name, default: (query.get(name) or [default])[0]  # noqa: E731
         try:
-            self._json(starting_hand_json(hand, position))
+            self._json(
+                starting_hand_json(
+                    first("hand", ""),
+                    first("positie", "button"),
+                    first("situatie", "open"),
+                    float(first("stack", "8")),
+                    int(first("achter", "1")),
+                )
+            )
         except ValueError as error:
             raise HttpError(HTTPStatus.BAD_REQUEST, str(error)) from error
 

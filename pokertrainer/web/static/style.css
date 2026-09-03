@@ -168,6 +168,9 @@ kbd {
   border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; outline: none;
 }
 .try-box input { width: 90px; text-transform: uppercase; }
+.try-box input.num { width: 70px; text-transform: none; }
+.try-box .row + .row { margin-top: 10px; }
+.try-box .row-part { display: inline-flex; align-items: center; gap: 10px; }
 .try-box .verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 14px; }
 .verdict-card { padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 .verdict-card h4 { margin: 0 0 4px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }

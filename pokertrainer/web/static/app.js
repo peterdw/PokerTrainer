@@ -444,19 +444,28 @@
   function renderTryHand() {
     const input = h("input", { value: "K5o", maxlength: 3, placeholder: "K5o" });
     const select = h("select", {}, app.content.positions.map((p) => h("option", { value: p.key, selected: p.key === "button" }, p.name)));
+    const situation = h("select", {}, app.content.situations.map((s) => h("option", { value: s.key }, s.name)));
+    const stack = h("input", { type: "number", value: 8, min: 1, max: 30, step: 1, title: "big blinds", class: "num" });
+    const behind = h("input", { type: "number", value: 1, min: 0, max: 9, step: 1, title: "spelers achter je", class: "num" });
+    const behindPart = h("span", { class: "row-part" }, h("span", {}, ", tegenstanders die kunnen callen"), behind);
+    const shortRow = h("div", { class: "row", hidden: true }, h("span", {}, "Stack (of de all-in als die kleiner is)"), stack, h("span", {}, "big blinds"), behindPart);
+    situation.addEventListener("change", () => {
+      shortRow.hidden = !/^(push|call)$/.test(situation.value);
+      behindPart.hidden = situation.value !== "push";
+    });
     const results = h("div", { class: "verdicts" });
     const check = async () => {
       results.innerHTML = "";
       try {
-        const data = await api(`/api/starthand?hand=${encodeURIComponent(input.value)}&positie=${encodeURIComponent(select.value)}`);
+        const query = new URLSearchParams({ hand: input.value, positie: select.value, situatie: situation.value, stack: stack.value, achter: behind.value });
+        const data = await api(`/api/starthand?${query}`);
         for (const model of data.models) {
-          const fold = !model.playable;
           results.append(
             h(
               "div",
               { class: "verdict-card" },
               h("h4", {}, model.name),
-              h("div", { class: `verdict ${fold ? "fold" : ""}` }, `${data.hand}: ${model.verdict}${fold ? " (fold)" : ""}`),
+              h("div", { class: `verdict ${model.fold ? "fold" : ""}` }, `${data.hand}: ${model.advice}`),
               h("ul", {}, model.lines.map((line) => h("li", {}, line))),
             ),
           );
@@ -469,8 +478,9 @@
     return h(
       "div",
       { class: "try-box" },
-      h("h3", {}, "Probeer zelf: wat zeggen beide methodes?"),
-      h("div", { class: "row" }, h("span", {}, "Starthand"), input, h("span", {}, "op positie"), select, h("button", { class: "btn gold small", type: "button", onclick: check }, "Beoordeel")),
+      h("h3", {}, "Probeer zelf: wat zegt de coach, en waarom?"),
+      h("div", { class: "row" }, h("span", {}, "Starthand"), input, h("span", {}, "op positie"), select, h("span", {}, "als"), situation, h("button", { class: "btn gold small", type: "button", onclick: check }, "Beoordeel")),
+      shortRow,
       results,
     );
   }
