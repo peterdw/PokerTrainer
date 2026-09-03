@@ -15,6 +15,7 @@ from .console import UserIO
 from .equity import EquityCalculator
 from .evaluation import HandEvaluator
 from .players import Player
+from .starting_hands import StartingHandModel
 from .strategies import BotProfile, DecisionStrategy, HeuristicBotStrategy, HumanConsoleStrategy
 
 BOT_PROFILES: dict[str, BotProfile] = {
@@ -39,14 +40,21 @@ class PlayerFactory(ABC):
 
 
 class BotPlayerFactory(PlayerFactory):
-    def __init__(self, profile: BotProfile, evaluator: HandEvaluator, rng: random.Random) -> None:
+    def __init__(
+        self,
+        profile: BotProfile,
+        evaluator: HandEvaluator,
+        rng: random.Random,
+        hand_model: StartingHandModel | None = None,
+    ) -> None:
         self._profile = profile
         self._evaluator = evaluator
         self._rng = rng
         self._equity = EquityCalculator(evaluator, rng, samples=100)
+        self._hand_model = hand_model
 
     def create_strategy(self) -> DecisionStrategy:
-        return HeuristicBotStrategy(self._profile, self._evaluator, self._equity, self._rng)
+        return HeuristicBotStrategy(self._profile, self._evaluator, self._equity, self._rng, hand_model=self._hand_model)
 
     def create_bot(self, chips: int) -> Player:
         return self.create(self._profile.name, chips)
@@ -66,5 +74,11 @@ class HumanPlayerFactory(PlayerFactory):
         return HumanConsoleStrategy(self._io, self._coach, self._auto_advice)
 
 
-def create_bot_lineup(keys: list[str], chips: int, evaluator: HandEvaluator, rng: random.Random) -> list[Player]:
-    return [BotPlayerFactory(BOT_PROFILES[key], evaluator, rng).create_bot(chips) for key in keys]
+def create_bot_lineup(
+    keys: list[str],
+    chips: int,
+    evaluator: HandEvaluator,
+    rng: random.Random,
+    hand_model: StartingHandModel | None = None,
+) -> list[Player]:
+    return [BotPlayerFactory(BOT_PROFILES[key], evaluator, rng, hand_model).create_bot(chips) for key in keys]

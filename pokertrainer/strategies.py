@@ -8,14 +8,13 @@ coach dezelfde logica kan gebruiken om uit te leggen waarom iets een goede zet i
 
 from __future__ import annotations
 
-import math
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, Sequence
 
 from .actions import Action, ActionType
-from .cards import Card, Rank, cards_to_str
+from .cards import cards_to_str
 from .console import QuitRequested, UserIO
 from .context import DecisionContext
 from .equity import EquityCalculator
@@ -36,62 +35,22 @@ class DecisionStrategy(ABC):
     def decide(self, context: DecisionContext) -> Action: ...
 
 
-# --- starthanden ------------------------------------------------------------
-def hand_label(cards: Sequence[Card]) -> str:
-    """``A♠ K♠`` -> ``AKs``, ``T♥ 9♦`` -> ``T9o``, ``Q♣ Q♦`` -> ``QQ``."""
-    high, low = sorted(cards, reverse=True)
-    if high.rank == low.rank:
-        return f"{high.rank.label}{low.rank.label}"
-    suffix = "s" if high.suit == low.suit else "o"
-    return f"{high.rank.label}{low.rank.label}{suffix}"
+# --- starthanden: zie starting_hands.py (hier opnieuw geëxporteerd voor bestaande importen) ---
+from .starting_hands import (  # noqa: E402
+    ChenModel,
+    StartingHandModel,
+    chen_breakdown,
+    chen_explanation,
+    chen_score,
+    hand_label,
+    starting_hand_class,
+)
 
-
-def chen_breakdown(cards: Sequence[Card]) -> list[tuple[str, float]]:
-    """De onderdelen van de Chen-formule: (omschrijving, punten). Som + afronden naar boven = score."""
-    high, low = sorted(cards, reverse=True)
-    base = {Rank.ACE: 10.0, Rank.KING: 8.0, Rank.QUEEN: 7.0, Rank.JACK: 6.0}.get(high.rank, high.rank.value / 2)
-    parts = [(f"hoogste kaart {high.rank.dutch_name}", base)]
-    if high.rank == low.rank:
-        parts.append(("paar: punten verdubbeld (minimaal 5)", max(5.0, base * 2) - base))
-        return parts
-    if high.suit == low.suit:
-        parts.append(("suited", 2.0))
-    gap = high.rank.value - low.rank.value - 1
-    penalty = {0: 0, 1: 1, 2: 2, 3: 4}.get(gap, 5)
-    if penalty:
-        parts.append((f"gat van {gap} kaart{'en' if gap > 1 else ''}", -float(penalty)))
-    if gap <= 1 and high.rank.value < Rank.QUEEN.value:
-        parts.append(("aansluitend onder de vrouw", 1.0))
-    return parts
-
-
-def chen_score(cards: Sequence[Card]) -> int:
-    """Chen-formule: een klassieke score (ongeveer -1 .. 20) voor starthanden."""
-    return math.ceil(sum(points for _, points in chen_breakdown(cards)))
-
-
-def chen_explanation(cards: Sequence[Card]) -> str:
-    """``"hoogste kaart heer 8, gat van 7 kaarten -5 = 3"``"""
-
-    def number(points: float, signed: bool) -> str:
-        text = f"{points:g}".replace(".", ",")
-        return f"+{text}" if signed and points > 0 else text
-
-    parts = chen_breakdown(cards)
-    pieces = [f"{label} {number(points, index > 0)}" for index, (label, points) in enumerate(parts)]
-    return ", ".join(pieces) + f" = {chen_score(cards)}"
-
-
-def starting_hand_class(score: int) -> str:
-    if score >= 12:
-        return "premium"
-    if score >= 9:
-        return "sterk"
-    if score >= 7:
-        return "speelbaar"
-    if score >= 5:
-        return "marginaal"
-    return "zwak"
+__all__ = [
+    "ChenModel", "StartingHandModel", "chen_breakdown", "chen_explanation", "chen_score", "hand_label",
+    "starting_hand_class", "BotProfile", "Decision", "DecisionStrategy", "HeuristicBotStrategy",
+    "HumanConsoleStrategy", "ScriptedStrategy", "Advisor",
+]
 
 
 @dataclass(frozen=True)
@@ -113,12 +72,18 @@ class HeuristicBotStrategy(DecisionStrategy):
         equity: EquityCalculator,
         rng: random.Random | None = None,
         mix: bool = True,
+        hand_model: StartingHandModel | None = None,
     ) -> None:
         self._profile = profile
         self._evaluator = evaluator
         self._equity = equity
         self._rng = rng or random.Random()
         self._mix = mix  # False = deterministisch (gebruikt door de coach)
+        self._hand_model = hand_model or ChenModel()
+
+    @property
+    def hand_model(self) -> StartingHandModel:
+        return self._hand_model
 
     def decide(self, context: DecisionContext) -> Action:
         return self.reason(context).action
@@ -166,28 +131,21 @@ class HeuristicBotStrategy(DecisionStrategy):
     # --- preflop ------------------------------------------------------------
     def _preflop(self, context: DecisionContext) -> Decision:
         profile = self._profile
-        label = hand_label(context.hole_cards)
-        score = chen_score(context.hole_cards)
-        reasons = [f"Starthand {label}: Chen-score {score}/20 ({starting_hand_class(score)})."]
-        late = context.position.startswith(("button", "cutoff"))
-        if late:
-            score += 1
-            reasons.append("Late positie: je mag iets meer handen spelen (+1).")
-        open_threshold = 9 - 4 * profile.looseness
-        premium = 11
+        hand = self._hand_model.assess(context.hole_cards, context.position, profile.looseness)
+        reasons = list(hand.lines)
         facing_raise = context.current_bet > context.big_blind
         bb = context.big_blind
 
-        if context.stack_in_big_blinds <= 10 and score >= open_threshold:
+        if context.stack_in_big_blinds <= 10 and hand.playable:
             reasons.append("Korte stack (≤ 10 big blinds): speel push-or-fold; all-in met een speelbare hand.")
             return Decision(Action(ActionType.ALL_IN), tuple(reasons))
 
         if not facing_raise:
             callers = sum(1 for o in context.opponents if o.bet_this_street >= bb and o.position != "big blind")
-            if score >= premium or (score >= open_threshold and self._chance(0.4 + profile.aggression / 2)):
+            if hand.premium or (hand.playable and self._chance(0.4 + profile.aggression / 2)):
                 reasons.append("Niemand heeft geraised: open met een raise van ± 3 big blinds (+1 per limper).")
                 return Decision(self._raise_to(context, (3 + callers) * bb), tuple(reasons))
-            if score >= open_threshold:
+            if hand.playable:
                 reasons.append("Speelbare hand, maar niet sterk genoeg om te raisen: meedoen voor de big blind.")
                 return Decision(self._call_or_check(context), tuple(reasons))
             if context.legal.can_check:
@@ -197,14 +155,14 @@ class HeuristicBotStrategy(DecisionStrategy):
             return Decision(Action(ActionType.FOLD), tuple(reasons))
 
         reasons.append(f"Er ligt een raise naar {context.current_bet}; je moet {context.to_call} bijleggen.")
-        if score >= premium:
+        if hand.premium:
             if context.legal.can_raise and self._chance(0.3 + profile.aggression * 0.6):
                 reasons.append("Premium hand: re-raise (3-bet) naar ± 3x de raise om de pot te bouwen.")
                 return Decision(self._raise_to(context, 3 * context.current_bet), tuple(reasons))
             reasons.append("Premium hand: minstens callen.")
             return Decision(self._call_or_check(context), tuple(reasons))
         cheap = context.to_call <= max(3 * bb, int(0.12 * context.stack))
-        if score >= open_threshold + 2 and cheap:
+        if hand.worth_a_call and cheap:
             reasons.append("Goede hand en de call is relatief goedkoop: call en kijk naar de flop.")
             return Decision(self._call_or_check(context), tuple(reasons))
         if context.legal.can_check:
