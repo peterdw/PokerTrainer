@@ -139,6 +139,32 @@ RULE_PAGES: list[tuple[str, list[str]]] = [
         ],
     ),
     (
+        "Starthanden beoordelen",
+        [
+            "De coach beoordeelt je twee eigen kaarten met de Chen-formule, een klassieke rekenregel.",
+            "Eerst de notatie die je bij de coach ziet:",
+            "• Achter de twee waarden staat een letter: 'o' (offsuit) als de kleuren verschillen, 's' (suited)",
+            "  als ze gelijk zijn. K5o is een heer en een vijf van verschillende kleur; QQ is een paar vrouwen.",
+            "Zo tel je de punten:",
+            "1. Hoogste kaart: aas 10, heer 8, vrouw 7, boer 6; lagere kaarten de helft van hun waarde (tien 5).",
+            "2. Een paar: verdubbel die punten (minimaal 5). Zo is 99 negen punten waard en 22 vijf.",
+            "3. Suited: 2 punten erbij.",
+            "4. Het gat tussen de twee waarden: geen kaart ertussen 0, één kaart -1, twee -2, drie -4, meer -5.",
+            "5. Twee aansluitende kaarten (gat 0 of 1) lager dan de vrouw: 1 punt erbij, want die maken",
+            "   makkelijk straights.",
+            "6. Rond naar boven af. Klasse: 12 of meer premium, 9 tot 11 sterk, 7 of 8 speelbaar, 5 of 6 marginaal,",
+            "   minder dan 5 zwak.",
+            "Voorbeeld: K5o = heer 8, gat van zeven kaarten -5 = 3: zwak. AKs = aas 10, suited +2 = 12: premium.",
+            "Vuistregels zonder rekenen:",
+            "• Elk paar is speelbaar; 99 en hoger is sterk, JJ en hoger premium.",
+            "• Twee plaatjes of tienen bij elkaar ('broadways') zijn speelbaar tot sterk.",
+            "• Hoe groter het gat, hoe slechter. Een heer of aas met een lage kaart is een klassieke beginnersval.",
+            "• Suited is een bonus van ongeveer één klasse, maar redt geen slechte hand.",
+            "• Aansluitend én suited (76s, 98s) is speelbaar, vooral in late positie tegen veel spelers.",
+            "• Positie telt mee: de coach geeft in late positie 1 punt extra.",
+        ],
+    ),
+    (
         "Toernooiregels (zoals op de WSOP)",
         [
             "• Iedereen start met evenveel chips. Wie geen chips meer heeft, is uitgeschakeld.",
@@ -190,6 +216,17 @@ RULE_QUIZ: list[tuple[str, list[str], int, str]] = [
         ["Schoppen", "Harten", "Geen enkele: alle kleuren zijn even veel waard"],
         3,
         "Kleuren hebben geen rangorde. Een schoppen aas en een harten aas zijn precies even sterk.",
+    ),
+    (
+        "Wat betekent de 'o' in de starthand K5o?",
+        [
+            "De twee kaarten hebben een verschillende kleur (offsuit)",
+            "Je hebt een paar",
+            "De hand is 'open' voor een straight",
+        ],
+        1,
+        "o = offsuit, s = suited (zelfde kleur). K5o is een heer en een vijf van verschillende kleur: "
+        "heer 8 punten, gat van zeven kaarten -5, samen 3. Een zwakke hand.",
     ),
     (
         "Waarom moeten de small blind en de big blind vooraf inzetten?",

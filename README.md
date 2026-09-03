@@ -34,7 +34,7 @@ python -m pytest
 | Menu | Les | Inhoud |
 |------|-----|--------|
 | 1 | Handrangschikking | Alle 10 categorieën met voorbeelden, daarna een quiz: "welke hand is dit?" en "wie wint de showdown?" |
-| 2 | Regels van toernooipoker | In tien delen, vanaf nul: het kaartspel, chips en blinds, verloop van een hand, de acties, inzetregels, zijpotten, showdown, toernooiregels en een woordenlijst. Met quiz van 10 vragen. |
+| 2 | Regels van toernooipoker | In elf delen, vanaf nul: het kaartspel, chips en blinds, verloop van een hand, de acties, inzetregels, zijpotten, showdown, starthanden beoordelen (Chen-formule), toernooiregels en een woordenlijst. Met quiz. |
 | 3 | Oefentafel met coach | 10 handen tegen drie bots met verschillende stijlen. De coach legt bij elke beslissing uit: starthandklasse, draws en outs, winkans, pot odds, positie en een advies. Wie bust is koopt opnieuw in. |
 | 4 | Sit-and-go toernooi | Zes spelers, WSOP-achtige blindstructuur met big blind ante vanaf niveau 4. De coach helpt alleen als je `?` typt. |
 
