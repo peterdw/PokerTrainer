@@ -732,6 +732,17 @@
     const block = h("div", { class: "advice" }, h("div", { class: "verdict" }, `Advies: ${advice.action.imperative}`), h("ul", {}, lines.map((line) => h("li", {}, line))));
     body.append(block);
     body.scrollTop = block.offsetTop - 10; // het advies bovenaan in beeld, ook als het lang is
+    applyAdvisedAmount(advice.action);
+  }
+
+  /** Zet slider, invoerveld en knop op het bedrag dat de coach adviseert, met een preset 'Coach'. */
+  function applyAdvisedAmount(action) {
+    const t = app.table;
+    if (!t || !t.raiseSync || !action.amount || !/^(bet|raise)$/.test(action.type)) return;
+    const presets = $("#raise-presets");
+    presets.querySelector(".preset.coach")?.remove();
+    presets.prepend(h("button", { class: "preset coach", type: "button", onclick: () => t.raiseSync(action.amount) }, `Coach ${fmt(action.amount)}`));
+    t.raiseSync(action.amount);
   }
 
   // --- de croupier spreekt: tekstballon en (optioneel) spraaksynthese ---
@@ -921,6 +932,7 @@
     }
     const canSize = legal.can_raise && legal.min_raise_to < legal.max_raise_to;
     $("#raise-box").hidden = !canSize;
+    t.raiseSync = null;
     if (canSize) buttons.append(setupRaise(d));
     buttons.append(h("button", { class: "btn allin", type: "button", onclick: () => sendAction("all-in") }, `All-in ${fmt(legal.max_raise_to)}`));
     $("#btn-advice").disabled = false;
@@ -944,6 +956,7 @@
     slider.oninput = () => sync(slider.value);
     input.onchange = () => sync(input.value);
     button.onclick = () => sendAction("raise", Number(slider.value));
+    app.table.raiseSync = sync;
 
     const unit = Math.max(1, Math.floor(d.big_blind / 2));
     const round = (v) => Math.round(v / unit) * unit;
