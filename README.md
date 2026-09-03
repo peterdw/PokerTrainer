@@ -21,7 +21,7 @@ Browser (opent automatisch `http://127.0.0.1:8765/`; ook zonder externe pakkette
 python main.py --web
 ```
 
-Opties: `--port 8080`, `--host 0.0.0.0`, `--no-browser`. Alternatief: `python -m pokertrainer.web`.
+Opties: `--port 8080`, `--host 0.0.0.0`, `--no-browser`, `--coach gevorderd`. Alternatief: `python -m pokertrainer.web`.
 
 Tests draaien (pytest):
 
@@ -41,6 +41,22 @@ python -m pytest
 Aan tafel typ je `f` (fold), `c` (call/check), `k` (check), `r 300` (bet/raise naar 300),
 `a` (all-in), `?` (coach), `h` (hulp) of `q` (stoppen).
 
+## Coachmethode: hoe beoordeelt de coach je starthand?
+
+De coach en de bots beoordelen de twee eigen kaarten met een **starthandmodel**
+(Strategy-patroon, `starting_hands.py`). Er zijn er twee, te kiezen met
+`--coach`, in het consolemenu of op het startscherm van de browser:
+
+| Methode | Wat ze doet | Voor wie |
+|---|---|---|
+| `beginner` (standaard) | **Chen-formule**: hoogste kaart, paar, suited en het gat ertussen opgeteld; de coach toont de berekening ("hoogste kaart heer 8, gat van 7 kaarten -5 = 3"). | Leren waarom een hand sterk of zwak is. |
+| `gevorderd` | **Rangetabel per positie** (6-max, raise first in): een vaste lijst handen per positie, van krap onder de gun (± 13 %) tot ruim op de button (± 43 %). De coach zegt vanaf welke positie een hand speelbaar is. | Zoals spelers het in de praktijk leren. |
+
+Beide modellen vertalen hun oordeel naar dezelfde schaal (premium / een raise
+waard / speelbaar / fold), zodat de bots met elke methode dezelfde speelstijl
+houden. In deel 9 van de regelles kun je in de browser een hand en positie
+invoeren en beide oordelen naast elkaar zien.
+
 ## Browserversie
 
 Dezelfde vier lessen en exact dezelfde spelmotor, maar dan met een grafische
@@ -58,7 +74,7 @@ als bladzijden met een quiz erachter.
   nieuwe blindniveaus, uitschakelingen en de winnaar. Met de knop **Stem** in de bovenbalk spreekt ze
   die zinnen ook hardop uit (spraaksynthese van de browser, Nederlandse stem indien aanwezig; standaard uit).
 - Het tempo van de bots is instelbaar (schuif in de bovenbalk).
-- Deeplink: `http://127.0.0.1:8765/?les=oefenen&naam=Peter` start meteen een les
+- Deeplink: `http://127.0.0.1:8765/?les=oefenen&naam=Peter&coach=gevorderd` start meteen een les
   (`rangschikking`, `regels`, `oefenen` of `toernooi`).
 - Aan de oefentafel adviseert de coach automatisch; in het toernooi alleen op verzoek.
 
@@ -94,6 +110,7 @@ pokertrainer/
   events.py      Observer        EventBus; ConsoleView, Coach en SessionStats abonneren zich
   actions.py     Command         Fold/Check/Call/Raise/AllIn-commando's + CommandFactory
   strategies.py  Strategy        HeuristicBotStrategy, HumanConsoleStrategy, ScriptedStrategy
+  starting_hands.py Strategy     StartingHandModel: ChenModel (beginner) en RangeChartModel (gevorderd)
   streets.py     State           PreFlop → Flop → Turn → River → Showdown
   tournament.py  Builder         TournamentConfigBuilder, presets (championship_sit_and_go)
   factory.py     Factory Method  PlayerFactory.create_strategy (bot- en mensfabriek)
