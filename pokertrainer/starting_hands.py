@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Sequence
 
 from .cards import Card, Rank, Suit
@@ -156,10 +156,11 @@ class HandAssessment:
     strength: float  # aandeel van alle starthanden dat zwakker is (0..1)
     verdict: str  # premium / sterk / speelbaar / marginaal / zwak
     lines: tuple[str, ...]
+    threshold: float = OPEN  # vanaf welke value de hand speelbaar is: OPEN om te openen, CALL_RAISE tegen een raise
 
     @property
     def playable(self) -> bool:
-        return self.value >= OPEN
+        return self.value >= self.threshold
 
     @property
     def premium(self) -> bool:
@@ -181,6 +182,14 @@ class StartingHandModel(ABC):
     def assess_label(self, label: str, position: str, looseness: float = 0.5) -> HandAssessment:
         return self.assess(label_cards(label), position, looseness)
 
+    def defend(self, cards: Sequence[Card], position: str, looseness: float = 0.5) -> HandAssessment:
+        """Oordeel wanneer er vóór jou al geraised is. Standaard hetzelfde als openen,
+        maar speelbaar vanaf ``CALL_RAISE`` in plaats van ``OPEN``."""
+        return replace(self.assess(cards, position, looseness), threshold=CALL_RAISE)
+
+    def defend_label(self, label: str, position: str, looseness: float = 0.5) -> HandAssessment:
+        return self.defend(label_cards(label), position, looseness)
+
 
 # --- model 1: Chen ------------------------------------------------------------
 class ChenModel(StartingHandModel):
@@ -199,6 +208,8 @@ class ChenModel(StartingHandModel):
             equal = sum(combos(other) for other, s in scores.items() if s == score and other != label)
             self._strength[label] = (lower + equal / 2) / TOTAL_COMBOS
 
+    BIG_BLIND_BONUS = 2  # punten erbij als je in de big blind een raise verdedigt
+
     @staticmethod
     def open_threshold(looseness: float) -> float:
         """Hoe losser de speler, hoe lager de grens om te openen (9 punten krap, 5 punten los)."""
@@ -212,21 +223,93 @@ class ChenModel(StartingHandModel):
             return 0.5 + 0.4 * (score - threshold) / (11 - threshold)
         return max(0.0, 0.5 * (1 - (threshold - score) / 6))
 
-    def assess(self, cards: Sequence[Card], position: str, looseness: float = 0.5) -> HandAssessment:
+    @classmethod
+    def points_needed(cls, looseness: float, target: float) -> int:
+        """Kleinste gehele Chen-score waarmee ``value_for`` de doelwaarde haalt: dezelfde grens als de bot."""
+        threshold = cls.open_threshold(looseness)
+        return next(score for score in range(-1, 21) if cls.value_for(score, threshold) >= target)
+
+    @classmethod
+    def open_points(cls, looseness: float) -> int:
+        return cls.points_needed(looseness, OPEN)
+
+    @classmethod
+    def call_points(cls, looseness: float) -> int:
+        return cls.points_needed(looseness, CALL_RAISE)
+
+    @staticmethod
+    def _verdict(value: float) -> str:
+        if value >= PREMIUM:
+            return "premium"
+        if value >= CALL_RAISE:
+            return "sterk"
+        if value >= OPEN:
+            return "speelbaar"
+        return "marginaal" if value >= 0.3 else "zwak"
+
+    def _score(self, cards: Sequence[Card], position: str) -> tuple[int, list[str]]:
         label = hand_label(cards)
         score = chen_score(cards)
         lines = [f"Starthand {label}: Chen-score {chen_explanation(cards)} van 20 ({starting_hand_class(score)})."]
         if is_late(position):
             score += 1
             lines.append("Late positie: je mag iets meer handen spelen (+1).")
+        return score, lines
+
+    def assess(self, cards: Sequence[Card], position: str, looseness: float = 0.5) -> HandAssessment:
+        label = hand_label(cards)
+        score, lines = self._score(cards, position)
         threshold = self.open_threshold(looseness)
-        lines.append(f"Openen vanaf {threshold:g} punten voor deze speelstijl; premium vanaf 11.")
+        open_points = self.open_points(looseness)
+        value = self.value_for(score, threshold)
+        lines.append(f"Openen vanaf {open_points} punten voor deze speelstijl; premium vanaf 11.")
+        if score >= 11:
+            lines.append(f"{label} heeft {score} punten: premium, hiermee raise je.")
+        elif value >= OPEN:
+            lines.append(f"{label} heeft {score} punten: genoeg om te openen.")
+        else:
+            lines.append(f"{label} heeft {score} punten, minder dan de {open_points} die je nodig hebt: fold.")
         return HandAssessment(
             label=label,
-            value=self.value_for(score, threshold),
+            value=value,
             strength=self._strength[label],
-            verdict=starting_hand_class(score),
+            verdict=self._verdict(value),
             lines=tuple(lines),
+        )
+
+    def defend(self, cards: Sequence[Card], position: str, looseness: float = 0.5) -> HandAssessment:
+        label = hand_label(cards)
+        score, lines = self._score(cards, position)
+        if position == "big blind":
+            score += self.BIG_BLIND_BONUS
+            lines.append(
+                f"Big blind: je hebt al 1 big blind betaald en niemand kan na jou nog raisen, dus de call kost "
+                f"minder en is veiliger: +{self.BIG_BLIND_BONUS} punten."
+            )
+        threshold = self.open_threshold(looseness)
+        call_points = self.call_points(looseness)
+        value = self.value_for(score, threshold)
+        lines.append(
+            f"Er is al geraised: dan heb je meer nodig dan om te openen. Minstens {call_points} punten om te callen "
+            "(positie- en big-blind-punten tellen mee), 11 om te re-raisen."
+        )
+        lines.append(
+            "Waarom: de raiser heeft een sterke hand aangekondigd en het initiatief. Met een middelmatige hand "
+            "betaal je te veel voor te weinig kans, en na de flop weet je vaak niet waar je staat."
+        )
+        if score >= 11:
+            lines.append(f"{label} heeft {score} punten: sterk genoeg om te re-raisen.")
+        elif value >= CALL_RAISE:
+            lines.append(f"{label} heeft {score} punten: genoeg om een gewone raise te callen.")
+        else:
+            lines.append(f"{label} heeft {score} punten, minder dan de {call_points} die je nodig hebt: fold.")
+        return HandAssessment(
+            label=label,
+            value=value,
+            strength=self._strength[label],
+            verdict=self._verdict(value),
+            lines=tuple(lines),
+            threshold=CALL_RAISE,
         )
 
 
@@ -264,7 +347,32 @@ CHART_POSITIONS: list[tuple[str, str]] = [
 ]
 # De big blind verdedigt ruim (hij heeft al geld in de pot); heads-up is de button ook small blind.
 POSITION_ALIASES = {"big blind": "button", "button (small blind)": "button"}
-PREMIUM_COUNT = 8  # de topacht van de rangorde: AA KK QQ JJ AKs AQs TT AKo
+# Tegen een raise: re-raisen met de top, callen volgens positie. De 3-bet-range is ook de top van de rangorde.
+THREE_BET_RANGE = "TT+ AQs+ AKo"
+PREMIUM_COUNT = len(parse_range(THREE_BET_RANGE))  # 8: AA KK QQ JJ TT AKs AQs AKo
+DEFEND_RANGES: dict[str, tuple[str, str]] = {
+    "big blind": (
+        "Als big blind heb je al een big blind betaald: de call is goedkoper dan voor de rest, "
+        "daarom verdedig je ruim",
+        "22+ A2s+ K2s+ Q4s+ J6s+ T6s+ 96s+ 85s+ 75s+ 64s+ 54s A2o+ K7o+ Q8o+ J8o+ T8o+ 98o 87o",
+    ),
+    "in positie": (
+        "In positie (cutoff of button) handel je na de flop als laatste en zie je eerst wat de raiser doet, "
+        "dus je mag wat ruimer callen",
+        "22+ A9s+ KTs+ QTs+ JTs T9s 98s 87s 76s AJo+ KQo",
+    ),
+    "buiten positie": (
+        "Buiten positie moet je na de flop als eerste handelen zonder te weten wat de raiser doet, "
+        "dus tegen een raise call je krap",
+        "66+ ATs+ KJs+ QJs JTs AQo+",
+    ),
+}
+
+
+def defend_key(position: str) -> str:
+    if position == "big blind":
+        return "big blind"
+    return "in positie" if is_late(position) else "buiten positie"
 
 
 class RangeChartModel(StartingHandModel):
@@ -285,10 +393,11 @@ class RangeChartModel(StartingHandModel):
                 raise ValueError(f"Range voor {position} mist handen uit de krappere range: {sorted(missing)}")
             self.ranges.append((position, labels))
             previous = labels
-        # Rangorde: hoe vroeger een hand geopend mag worden, hoe hoger; binnen een laag beslist Chen.
+        # Rangorde: eerst de 3-bet-range (premium), daarna hoe vroeger een hand geopend mag worden;
+        # binnen een laag beslist Chen.
         order: list[str] = []
         seen: set[str] = set()
-        for _, labels in self.ranges:
+        for labels in [parse_range(THREE_BET_RANGE), *(labels for _, labels in self.ranges)]:
             order.extend(sorted(labels - seen, key=self._sort_key))
             seen |= labels
         order.extend(sorted(set(all_labels()) - seen, key=self._sort_key))
@@ -297,6 +406,13 @@ class RangeChartModel(StartingHandModel):
         self.width: dict[str, int] = {position: len(labels) for position, labels in self.ranges}
         self.share: dict[str, float] = {
             position: sum(combos(label) for label in labels) / TOTAL_COMBOS for position, labels in self.ranges
+        }
+        self.three_bet: list[str] = sorted(parse_range(THREE_BET_RANGE), key=self.rank.__getitem__)
+        self.defend_ranges: dict[str, list[str]] = {
+            key: sorted(parse_range(text), key=self.rank.__getitem__) for key, (_, text) in DEFEND_RANGES.items()
+        }
+        self.defend_share: dict[str, float] = {
+            key: sum(combos(label) for label in labels) / TOTAL_COMBOS for key, labels in self.defend_ranges.items()
         }
 
     @staticmethod
@@ -359,6 +475,73 @@ class RangeChartModel(StartingHandModel):
             verdict=verdict,
             lines=tuple(lines),
         )
+
+    def _scaled(self, labels: list[str], factor: float) -> list[str]:
+        """Krappe spelers houden de beste handen van een range over, losse spelers vullen aan uit de rangorde."""
+        wanted = max(1, round(len(labels) * factor))
+        if wanted <= len(labels):
+            return labels[:wanted]
+        known = set(labels)
+        extra = [label for label in self.ranking if label not in known][: wanted - len(labels)]
+        return labels + extra
+
+    def defend(self, cards: Sequence[Card], position: str, looseness: float = 0.5) -> HandAssessment:
+        label = hand_label(cards)
+        rank = self.rank[label]
+        key = defend_key(position)
+        why, _ = DEFEND_RANGES[key]
+        factor = 0.6 + 0.8 * looseness
+        call_range = self._scaled(self.defend_ranges[key], factor)
+        top = self.top_share(label)
+        lines = [
+            f"Starthand {label}: plaats {rank + 1} van 169 in de rangorde (top {top:.0%} van alle handen).",
+            f"Er is al geraised. {why} (± {self.defend_share[key]:.0%} van de handen).",
+        ]
+        if label in self.three_bet:
+            index = self.three_bet.index(label)
+            value = 0.9 + 0.1 * (1 - index / len(self.three_bet))
+            verdict = "premium"
+            lines.append(
+                "In de 3-bet-range (TT+, AQs+, AKo): re-raise. Met een van de beste handen wil je de pot groot "
+                "maken en zwakkere handen laten betalen; gewoon callen laat ze goedkoop meekijken."
+            )
+        elif label in call_range:
+            index = call_range.index(label)
+            value = CALL_RAISE + 0.27 * (1 - index / len(call_range))
+            verdict = "sterk"
+            lines.append(
+                "In de call-range: sterk genoeg om een gewone raise (2 à 3 big blinds) te callen en de flop te "
+                "bekijken. Een re-raise is te veel eer voor deze hand; de raiser heeft het initiatief."
+            )
+        else:
+            value = 0.5 * (1 - rank / len(self.ranking))
+            earliest = self.earliest_position(label)
+            verdict = "marginaal" if earliest is not None else "zwak"
+            if earliest is None:
+                lines.append(f"{label} staat in geen enkele openingsrange, dus tegen een raise al zeker niet: fold.")
+            else:
+                lines.append(
+                    f"Buiten de verdedigingsrange: fold. {label} open je zelf pas vanaf '{earliest}', maar tegen een "
+                    "raise heb je meer nodig: de raiser heeft al kracht getoond en het initiatief. Chips bewaren "
+                    "voor een betere situatie is winst."
+                )
+        return HandAssessment(
+            label=label, value=value, strength=1 - top, verdict=verdict, lines=tuple(lines), threshold=CALL_RAISE
+        )
+
+    def defend_summary_lines(self) -> list[str]:
+        share = self.defend_share
+        return [
+            "• Re-raisen (3-bet) doe je met premium handen: TT en hoger, AQs en hoger, AKo. Je bouwt de pot",
+            "  met de beste hand en laat zwakkere handen betalen.",
+            f"• In positie (cutoff, button) call je een raise met ± {share['in positie']:.0%} van de handen: je handelt",
+            "  na de flop als laatste en ziet eerst wat de raiser doet.",
+            f"• Buiten positie call je krap (± {share['buiten positie']:.0%}): je moet na de flop als eerste handelen.",
+            f"• Als big blind heb je al een big blind betaald: de call is goedkoper, daarom verdedig je ruim",
+            f"  (± {share['big blind']:.0%}).",
+            "• Een hand die je zelf zou openen, is tegen een raise niet automatisch goed genoeg: de raiser heeft",
+            "  al kracht getoond. Buiten deze ranges: fold.",
+        ]
 
     def summary_lines(self) -> list[str]:
         """Korte samenvatting van de tabel, voor de les."""
