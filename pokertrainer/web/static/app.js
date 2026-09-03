@@ -581,7 +581,6 @@
     $("#info-hand").textContent = "";
     $("#info-level").textContent = "";
     hideActionBar();
-    $("#btn-advice").disabled = true;
   }
 
   function buildSeats(state) {
@@ -935,7 +934,7 @@
     t.raiseSync = null;
     if (canSize) buttons.append(setupRaise(d));
     buttons.append(h("button", { class: "btn allin", type: "button", onclick: () => sendAction("all-in") }, `All-in ${fmt(legal.max_raise_to)}`));
-    $("#btn-advice").disabled = false;
+    setAdviceAvailable(true);
     if (d.advice) coachAdvice(d.advice);
   }
 
@@ -980,6 +979,7 @@
     if (!t || !t.decision) return;
     t.decision = null;
     $("#action-bar").classList.add("busy");
+    setAdviceAvailable(false);
     try {
       await api(`/api/sessions/${app.session}/action`, { type, amount: amount || 0 });
     } catch (error) {
@@ -991,6 +991,14 @@
     $("#action-bar").hidden = true;
     $("#waiting").hidden = !app.table;
     if (app.table) app.table.decision = null;
+    setAdviceAvailable(false);
+  }
+
+  /** De coach kan alleen adviseren zolang jij aan de beurt bent. */
+  function setAdviceAvailable(available) {
+    const button = $("#btn-advice");
+    button.disabled = !available;
+    button.title = available ? "Vraag de coach wat hij zou doen en waarom" : "De coach adviseert zodra jij aan de beurt bent";
   }
 
   async function askAdvice() {
@@ -1133,7 +1141,7 @@
         hideActionBar();
         $("#waiting").hidden = true;
         clearActive();
-        $("#btn-advice").disabled = true;
+        setAdviceAvailable(false);
         if (ev.outcome !== "quit") showSummary(ev);
         break;
       default:
