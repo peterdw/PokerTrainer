@@ -19,6 +19,7 @@ from .console import QuitRequested, UserIO
 from .context import DecisionContext
 from .equity import EquityCalculator
 from .evaluation import HandEvaluator
+from .push_fold import NASH, PUSH_FOLD_LIMIT, NashPushFold
 
 if TYPE_CHECKING:
     from .coach import Advice
@@ -62,6 +63,10 @@ class BotProfile:
     description: str
 
 
+CHEAP_CALL_BB = 3  # een 'gewone' raise: tot ± 3 big blinds bijleggen ...
+CHEAP_CALL_STACK_SHARE = 0.12  # ... of tot 12% van je stack
+
+
 class HeuristicBotStrategy(DecisionStrategy):
     """Speelt op basis van starthandscore (preflop) en winkans vs pot odds (postflop)."""
 
@@ -80,6 +85,7 @@ class HeuristicBotStrategy(DecisionStrategy):
         self._rng = rng or random.Random()
         self._mix = mix  # False = deterministisch (gebruikt door de coach)
         self._hand_model = hand_model or ChenModel()
+        self._push_fold: NashPushFold = NASH
 
     @property
     def hand_model(self) -> StartingHandModel:
@@ -130,15 +136,16 @@ class HeuristicBotStrategy(DecisionStrategy):
 
     # --- preflop ------------------------------------------------------------
     def _preflop(self, context: DecisionContext) -> Decision:
+        if context.stack_in_big_blinds <= PUSH_FOLD_LIMIT:
+            return self._push_or_fold(context)
         profile = self._profile
-        hand = self._hand_model.assess(context.hole_cards, context.position, profile.looseness)
-        reasons = list(hand.lines)
         facing_raise = context.current_bet > context.big_blind
+        if facing_raise:
+            hand = self._hand_model.defend(context.hole_cards, context.position, profile.looseness)
+        else:
+            hand = self._hand_model.assess(context.hole_cards, context.position, profile.looseness)
+        reasons = list(hand.lines)
         bb = context.big_blind
-
-        if context.stack_in_big_blinds <= 10 and hand.playable:
-            reasons.append("Korte stack (≤ 10 big blinds): speel push-or-fold; all-in met een speelbare hand.")
-            return Decision(Action(ActionType.ALL_IN), tuple(reasons))
 
         if not facing_raise:
             callers = sum(1 for o in context.opponents if o.bet_this_street >= bb and o.position != "big blind")
@@ -161,14 +168,50 @@ class HeuristicBotStrategy(DecisionStrategy):
                 return Decision(self._raise_to(context, 3 * context.current_bet), tuple(reasons))
             reasons.append("Premium hand: minstens callen.")
             return Decision(self._call_or_check(context), tuple(reasons))
-        cheap = context.to_call <= max(3 * bb, int(0.12 * context.stack))
-        if hand.worth_a_call and cheap:
-            reasons.append("Goede hand en de call is relatief goedkoop: call en kijk naar de flop.")
-            return Decision(self._call_or_check(context), tuple(reasons))
+        limit = max(CHEAP_CALL_BB * bb, int(CHEAP_CALL_STACK_SHARE * context.stack))
+        if hand.worth_a_call:
+            if context.to_call <= limit:
+                reasons.append("Goede hand en de call is relatief goedkoop: call en kijk naar de flop.")
+                return Decision(self._call_or_check(context), tuple(reasons))
+            reasons.append(
+                f"De raise is {context.current_bet / bb:g} big blinds; je moet {context.to_call / bb:g} big blinds "
+                f"bijleggen ({context.to_call / max(1, context.stack):.0%} van je stack). Deze hand call je alleen "
+                f"tegen een gewone raise (tot {CHEAP_CALL_BB} big blinds of {CHEAP_CALL_STACK_SHARE:.0%} van je stack): "
+                "te duur, fold."
+            )
+        else:
+            reasons.append("Niet sterk genoeg om een raise te betalen: fold (chips bewaren voor een betere situatie).")
         if context.legal.can_check:
             return Decision(Action(ActionType.CHECK), tuple(reasons))
-        reasons.append("Niet sterk genoeg om een raise te betalen: fold (chips bewaren voor betere spots).")
         return Decision(Action(ActionType.FOLD), tuple(reasons))
+
+    def _push_or_fold(self, context: DecisionContext) -> Decision:
+        """Korte stack: all-in of fold volgens de push-or-fold-tabel (duwen, re-shoven of een all-in callen)."""
+        looseness = self._profile.looseness
+        bb = context.big_blind
+        stack_bb = context.stack_in_big_blinds
+        live = [opponent for opponent in context.opponents if not opponent.folded]
+        callers = sum(1 for opponent in live if not opponent.all_in)
+        if context.current_bet > bb:
+            aggressor = max(live, key=lambda opponent: opponent.bet_this_street)
+            raise_bb = context.current_bet / bb
+            if aggressor.all_in or context.to_call >= context.stack:
+                # Een all-in (of een inzet die je dekt): callen of folden; effectief staat het kleinste op het spel.
+                advice = self._push_fold.calling(context.hole_cards, stack_bb, raise_bb, looseness)
+                if advice.go:
+                    action = Action(ActionType.ALL_IN) if context.to_call >= context.stack else Action(ActionType.CALL)
+                    return Decision(action, advice.lines)
+                return Decision(self._fold_or_check(context), advice.lines)
+            advice = self._push_fold.reshoving(context.hole_cards, stack_bb, raise_bb, callers, context.position, looseness)
+            if advice.go:
+                return Decision(Action(ActionType.ALL_IN), advice.lines)
+            return Decision(self._fold_or_check(context), advice.lines)
+        advice = self._push_fold.pushing(context.hole_cards, stack_bb, context.position, callers, looseness)
+        if advice.go:
+            return Decision(Action(ActionType.ALL_IN), advice.lines)
+        if context.legal.can_check:
+            return Decision(Action(ActionType.CHECK), advice.lines + ("Je mag gratis kijken: check in plaats van fold.",))
+        return Decision(Action(ActionType.FOLD), advice.lines)
 
     # --- postflop -----------------------------------------------------------
     def _postflop(self, context: DecisionContext) -> Decision:
