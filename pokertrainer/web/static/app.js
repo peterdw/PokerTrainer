@@ -58,7 +58,7 @@
     h("div", { class: `cards ${wrapCls}` }, cards.map((c) => cardEl(c, cls)));
 
   // ---------- toestand ----------
-  const app = { name: "Jij", content: null, session: null, stream: null, table: null, toastTimer: null };
+  const app = { name: "Jij", model: null, content: null, session: null, stream: null, table: null, toastTimer: null };
 
   function showScreen(id) {
     document.querySelectorAll(".screen").forEach((s) => (s.hidden = s.id !== id));
@@ -114,6 +114,7 @@
             oninput: (e) => (app.name = e.target.value.trim() || "Jij"),
           }),
         ),
+        renderMethodChoice(),
       ),
       h(
         "section",
@@ -148,6 +149,34 @@
         ),
       ),
     );
+  }
+
+  /** Keuze van de coachmethode (starthandmodel) voor de tafels. */
+  function renderMethodChoice() {
+    const coach = app.content.coach;
+    if (!app.model) app.model = coach.default;
+    const box = h("div", { class: "method-field" }, h("span", { class: "label" }, "Coachmethode voor starthanden"));
+    const options = h("div", { class: "options" });
+    for (const model of coach.models) {
+      options.append(
+        h(
+          "button",
+          {
+            class: `option ${model.key === app.model ? "chosen" : ""}`,
+            type: "button",
+            onclick: () => {
+              app.model = model.key;
+              options.querySelectorAll(".option").forEach((el) => el.classList.toggle("chosen", el.dataset.key === model.key));
+            },
+            "data-key": model.key,
+          },
+          h("strong", {}, model.name),
+          h("small", {}, model.description),
+        ),
+      );
+    }
+    box.append(options);
+    return box;
   }
 
   function startLesson(lesson) {
@@ -395,6 +424,7 @@
           h("div", { class: "slide-num" }, `Deel ${i + 1} van ${pages.length}`),
           h("h2", {}, page.heading),
           formatLines(page.lines),
+          /starthanden/i.test(page.heading) && renderTryHand(),
           h(
             "div",
             { class: "actions" },
@@ -408,6 +438,41 @@
       );
     };
     show();
+  }
+
+  /** Probeer zelf: een starthand en positie invoeren en beide methodes vergelijken. */
+  function renderTryHand() {
+    const input = h("input", { value: "K5o", maxlength: 3, placeholder: "K5o" });
+    const select = h("select", {}, app.content.positions.map((p) => h("option", { value: p.key, selected: p.key === "button" }, p.name)));
+    const results = h("div", { class: "verdicts" });
+    const check = async () => {
+      results.innerHTML = "";
+      try {
+        const data = await api(`/api/starthand?hand=${encodeURIComponent(input.value)}&positie=${encodeURIComponent(select.value)}`);
+        for (const model of data.models) {
+          const fold = !model.playable;
+          results.append(
+            h(
+              "div",
+              { class: "verdict-card" },
+              h("h4", {}, model.name),
+              h("div", { class: `verdict ${fold ? "fold" : ""}` }, `${data.hand}: ${model.verdict}${fold ? " (fold)" : ""}`),
+              h("ul", {}, model.lines.map((line) => h("li", {}, line))),
+            ),
+          );
+        }
+      } catch (error) {
+        results.append(h("p", { class: "muted" }, error.message));
+      }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
+    return h(
+      "div",
+      { class: "try-box" },
+      h("h3", {}, "Probeer zelf: wat zeggen beide methodes?"),
+      h("div", { class: "row" }, h("span", {}, "Starthand"), input, h("span", {}, "op positie"), select, h("button", { class: "btn gold small", type: "button", onclick: check }, "Beoordeel")),
+      results,
+    );
   }
 
   function runRulesQuiz(wrap) {
@@ -448,7 +513,7 @@
     await leaveTable();
     let session;
     try {
-      session = await api("/api/sessions", { name: app.name });
+      session = await api("/api/sessions", { name: app.name, model: app.model });
     } catch (error) {
       toast(`Kan geen sessie starten: ${error.message}`);
       return;
@@ -502,6 +567,7 @@
     $("#log-body").innerHTML = "";
     $("#coach-body").innerHTML = "";
     $("#info-title").textContent = "";
+    $("#info-model").textContent = "";
     $("#info-hand").textContent = "";
     $("#info-level").textContent = "";
     hideActionBar();
@@ -948,6 +1014,7 @@
         t.autoAdvice = ev.auto_advice;
         t.humanName = ev.human;
         $("#info-title").textContent = ev.title;
+        $("#info-model").textContent = ev.model ? `Coach: ${ev.model.name.split(":")[0]}` : "";
         buildSeats(ev.state);
         renderState(ev.state);
         coachIntro(ev);
@@ -1088,6 +1155,7 @@
     // Deeplink: ?les=oefenen&naam=Peter start meteen een les.
     const params = new URLSearchParams(location.search);
     if (params.get("naam")) app.name = params.get("naam").trim().slice(0, 16) || "Jij";
+    if (app.content.coach.models.some((m) => m.key === params.get("coach"))) app.model = params.get("coach");
     const wanted = app.content.lessons.find((lesson) => lesson.key === params.get("les"));
     if (wanted) startLesson(wanted);
   }

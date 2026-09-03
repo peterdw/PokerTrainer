@@ -148,6 +148,32 @@ kbd {
   border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; width: 180px; outline: none;
 }
 .name-field input:focus { border-color: var(--gold); }
+.method-field {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 16px;
+}
+.method-field .options { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.method-field .option { max-width: 330px; }
+.method-field .option strong { display: block; margin-bottom: 3px; }
+.method-field .option small { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.method-field .option.chosen { border-color: var(--gold); background: rgba(226, 185, 85, .1); }
+.method-field .label { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.try-box {
+  margin-top: 18px; padding: 16px 18px; border-radius: 14px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.try-box h3 { margin: 0 0 10px; font-size: 16px; font-family: var(--font-display); }
+.try-box .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.try-box input, .try-box select {
+  font: inherit; font-weight: 700; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; outline: none;
+}
+.try-box input { width: 90px; text-transform: uppercase; }
+.try-box .verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 14px; }
+.verdict-card { padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.verdict-card h4 { margin: 0 0 4px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.verdict-card .verdict { font-size: 20px; font-weight: 800; color: var(--gold-2); text-transform: capitalize; }
+.verdict-card .verdict.fold { color: #ffb4ad; }
+.verdict-card ul { margin: 8px 0 0 18px; padding: 0; font-size: 13.5px; line-height: 1.45; }
 .lesson-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin-top: 26px; }
 .lesson-card {
   position: relative; display: flex; flex-direction: column; gap: 8px; cursor: pointer;

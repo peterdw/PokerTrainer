@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from ..evaluation import HandEvaluator
 from ..quiz import QuizGenerator
-from .content import build_content, ranking_quiz_json
+from .content import build_content, ranking_quiz_json, starting_hand_json
 from .session import TABLE_PRESETS, SessionBusy, WebSession
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -42,8 +42,8 @@ class HttpError(Exception):
 class TrainerBackend:
     """Facade voor de HTTP-laag: lesinhoud en de actieve sessies."""
 
-    def __init__(self) -> None:
-        self._content = build_content()
+    def __init__(self, default_model: str = "beginner") -> None:
+        self._content = build_content(default_model)
         self._quiz = QuizGenerator(random.Random(), HandEvaluator())
         self._sessions: dict[str, WebSession] = {}
         self._lock = threading.Lock()
@@ -55,8 +55,8 @@ class TrainerBackend:
         with self._lock:
             return ranking_quiz_json(self._quiz)
 
-    def create_session(self, player_name: str) -> WebSession:
-        session = WebSession(player_name)
+    def create_session(self, player_name: str, model_key: str | None = None) -> WebSession:
+        session = WebSession(player_name, model_key=model_key)
         with self._lock:
             self._prune()
             self._sessions[session.id] = session
@@ -99,6 +99,7 @@ class RequestHandler(BaseHTTPRequestHandler):
     ROUTES: list[Route] = [
         ("GET", re.compile(r"/api/content"), "content"),
         ("GET", re.compile(r"/api/quiz/ranking"), "ranking_quiz"),
+        ("GET", re.compile(r"/api/starthand"), "starting_hand"),
         ("POST", re.compile(r"/api/sessions"), "create_session"),
         ("GET", re.compile(r"/api/sessions/(?P<sid>[0-9a-f]{32})/stream"), "stream"),
         ("POST", re.compile(r"/api/sessions/(?P<sid>[0-9a-f]{32})/table"), "start_table"),
@@ -196,11 +197,22 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _route_ranking_quiz(self, params: dict[str, str], query: dict[str, list[str]]) -> None:
         self._json(self.backend.ranking_quiz())
 
+    def _route_starting_hand(self, params: dict[str, str], query: dict[str, list[str]]) -> None:
+        hand = (query.get("hand") or [""])[0]
+        position = (query.get("positie") or ["button"])[0]
+        try:
+            self._json(starting_hand_json(hand, position))
+        except ValueError as error:
+            raise HttpError(HTTPStatus.BAD_REQUEST, str(error)) from error
+
     def _route_create_session(self, params: dict[str, str], query: dict[str, list[str]]) -> None:
         body = self._body()
         name = str(body.get("name", ""))[:24]
-        session = self.backend.create_session(name)
-        self._json({"id": session.id, "name": session.player_name}, HTTPStatus.CREATED)
+        try:
+            session = self.backend.create_session(name, body.get("model") or None)
+        except ValueError as error:
+            raise HttpError(HTTPStatus.BAD_REQUEST, str(error)) from error
+        self._json({"id": session.id, "name": session.player_name, "model": session.hand_model.key}, HTTPStatus.CREATED)
 
     def _route_start_table(self, params: dict[str, str], query: dict[str, list[str]]) -> None:
         session = self.backend.session(params["sid"])
@@ -260,8 +272,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
 
-def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
-    server = TrainerHTTPServer((host, port), TrainerBackend())
+def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True, default_model: str = "beginner") -> None:
+    server = TrainerHTTPServer((host, port), TrainerBackend(default_model))
     url = f"http://{host}:{server.server_address[1]}/"
     print(f"♠ ♥ ♦ ♣  Poker Trainer draait op {url}   (Ctrl+C om te stoppen)")
     if open_browser:

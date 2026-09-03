@@ -24,6 +24,7 @@ from ..factory import BOT_PROFILES, create_bot_lineup
 from ..lessons import PracticeLesson, TournamentLesson
 from ..players import Player
 from ..session import Tournament
+from ..starting_hands import StartingHandModel, hand_model
 from ..tournament import TournamentConfig, championship_sit_and_go, practice_table
 from ..view import SessionStats
 from .adapters import PacedStrategy, PacingObserver, Tempo, WebHumanStrategy, WebIO
@@ -65,8 +66,9 @@ class SessionBusy(RuntimeError):
 
 
 class WebSession:
-    def __init__(self, player_name: str, seed: int | None = None) -> None:
+    def __init__(self, player_name: str, seed: int | None = None, model_key: str | None = None) -> None:
         self.id = uuid.uuid4().hex
+        self.hand_model: StartingHandModel = hand_model(model_key)
         name = (player_name or "").strip() or "Jij"
         if name in {profile.name for profile in BOT_PROFILES.values()}:
             name = f"{name} (jij)"
@@ -136,10 +138,12 @@ class WebSession:
     def _play(self, preset: TablePreset) -> None:
         config = preset.config()
         bus = EventBus()
-        coach = Coach(self._evaluator, self._equity, WebIO(self.emit), self.player_name, self._rng)
+        coach = Coach(self._evaluator, self._equity, WebIO(self.emit), self.player_name, self._rng, self.hand_model)
         self._human = WebHumanStrategy(self.emit, self._inbox, coach, preset.auto_advice)
         human = Player(self.player_name, config.starting_stack, self._human, is_human=True)
-        bots = create_bot_lineup(list(preset.bot_keys), config.starting_stack, self._evaluator, self._rng)
+        bots = create_bot_lineup(
+            list(preset.bot_keys), config.starting_stack, self._evaluator, self._rng, self.hand_model
+        )
         for bot in bots:
             bot.strategy = PacedStrategy(bot.strategy, self._tempo, bus, self._rng)
         players = [human, *bots]
@@ -163,6 +167,7 @@ class WebSession:
                 "auto_advice": preset.auto_advice,
                 "max_hands": preset.max_hands,
                 "human": self.player_name,
+                "model": {"key": self.hand_model.key, "name": self.hand_model.name},
                 "config": {
                     "name": config.name,
                     "starting_stack": config.starting_stack,

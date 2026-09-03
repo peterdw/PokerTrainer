@@ -11,6 +11,7 @@ from ..evaluation import HandCategory
 from ..factory import BOT_PROFILES
 from ..lessons import RULE_PAGES, RULE_QUIZ, LessonFactory, PracticeLesson, TournamentLesson
 from ..quiz import EXAMPLE_HANDS, QuizGenerator
+from ..starting_hands import CHART_POSITIONS, HAND_MODELS, HandAssessment, hand_model, normalize_label
 from ..tournament import championship_sit_and_go, practice_table
 from .presenter import cards_json, level_json
 
@@ -56,7 +57,52 @@ def _table_json(lesson: type[PracticeLesson] | type[TournamentLesson], config) -
     }
 
 
-def build_content() -> dict:
+COACH_LOOSENESS = 0.45  # dezelfde speelstijl als de coach
+
+
+def models_json(default_key: str) -> dict:
+    return {
+        "default": default_key,
+        "models": [
+            {"key": model.key, "name": model.name, "description": model.description} for model in HAND_MODELS.values()
+        ],
+    }
+
+
+def positions_json() -> list[dict]:
+    return [{"key": position, "name": position} for position, _ in CHART_POSITIONS] + [
+        {"key": "big blind", "name": "big blind"}
+    ]
+
+
+def assessment_json(assessment: HandAssessment) -> dict:
+    return {
+        "label": assessment.label,
+        "verdict": assessment.verdict,
+        "value": round(assessment.value, 3),
+        "strength": round(assessment.strength, 3),
+        "playable": assessment.playable,
+        "premium": assessment.premium,
+        "lines": list(assessment.lines),
+    }
+
+
+def starting_hand_json(hand: str, position: str) -> dict:
+    """Het oordeel van álle modellen over één starthand; ValueError bij onbekende invoer."""
+    label = normalize_label(hand)
+    if position not in {key["key"] for key in positions_json()}:
+        raise ValueError(f"Onbekende positie: {position!r}")
+    return {
+        "hand": label,
+        "position": position,
+        "models": [
+            {"key": model.key, "name": model.name, **assessment_json(model.assess_label(label, position, COACH_LOOSENESS))}
+            for model in HAND_MODELS.values()
+        ],
+    }
+
+
+def build_content(default_model: str = "beginner") -> dict:
     lessons = []
     for key in LessonFactory.keys():
         meta = LESSON_META.get(key, {"icon": "•", "kind": "unknown", "description": ""})
@@ -93,7 +139,15 @@ def build_content() -> dict:
         PracticeLesson.key: _table_json(PracticeLesson, practice_table()),
         TournamentLesson.key: _table_json(TournamentLesson, championship_sit_and_go()),
     }
-    return {"lessons": lessons, "ranking": {"categories": categories}, "rules": rules, "bots": bots, "tables": tables}
+    return {
+        "lessons": lessons,
+        "ranking": {"categories": categories},
+        "rules": rules,
+        "bots": bots,
+        "tables": tables,
+        "coach": models_json(hand_model(default_model).key),
+        "positions": positions_json(),
+    }
 
 
 def ranking_quiz_json(generator: QuizGenerator, questions: int = 6, showdowns: int = 4) -> dict:
