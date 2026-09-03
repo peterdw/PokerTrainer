@@ -130,3 +130,7 @@ oefentafel, het toernooi en de tests (die met `ScriptedStrategy` en
 Alle bots gebruiken dezelfde `HeuristicBotStrategy` met een ander profiel
 (`looseness`, `aggression`): preflop op basis van de Chen-formule, postflop
 op basis van geschatte winkans versus pot odds.
+
+## Licentie
+
+MIT, zie [LICENSE](LICENSE).
